@@ -1,0 +1,105 @@
+#+TITLE: cl-cmaes
+#+AUTHOR: Bryce MacInnis
+#+OPTIONS: toc:nil num:nil
+
+* cl-cmaes
+
+**A CMA-ES library for Common Lisp. Uses CFFI to wrap Nikolaus Hansen's C-CMAES.**
+
+This library provides a Common Lisp interface to the Covariance Matrix Adaptation Evolution Strategy (CMA-ES), a popular algorithm for non-linear numerical optimization problems. It binds to the reference C implementation.
+
+** Dependencies
+
+- *Common Lisp Implementation* (SBCL, CCL, etc.)
+- *CFFI* (Common Foreign Function Interface)
+- *libcmaes* (The compiled C shared library)
+
+** Installation
+
+*** 1. Build the C Library
+You need the shared library (~libcmaes.so~ on Linux, ~libcmaes.dylib~ on macOS).
+
+1. Download the C source code for CMA-ES (typically ~cmaes.c~ and ~cmaes.h~ from Nikolaus Hansen's repository).
+2. Compile it as a shared library.
+
+*Linux:*
+#+BEGIN_SRC bash
+gcc -shared -fPIC -o libcmaes.so cmaes.c -lm
+#+END_SRC
+
+*macOS:*
+#+BEGIN_SRC bash
+gcc -dynamiclib -o libcmaes.dylib cmaes.c
+#+END_SRC
+
+3. Ensure the resulting library file is in your system's library path (e.g., ~/usr/local/lib~) or that ~LD_LIBRARY_PATH~ (or ~DYLD_LIBRARY_PATH~) includes the directory where the file is located.
+
+*** 2. Load the Lisp System
+Ensure the ~cma-es~ package is loaded (e.g., via ASDF or Quicklisp if you have packaged it, or simply by loading the file directly).
+
+#+BEGIN_SRC lisp
+(ql:quickload :cffi)
+(load "cma-es.lisp")
+#+END_SRC
+
+** Usage
+
+*** Simple Interface (~run~)
+
+For basic optimization tasks where you simply want to minimize a function over a set number of generations.
+
+#+BEGIN_SRC lisp
+;; Define a fitness function (e.g., Sphere function: sum of squares)
+;; Note: The input `x` is a list of doubles.
+(defun sphere-function (x)
+  (reduce #'+ (mapcar (lambda (val) (* val val)) x)))
+
+;; Run the optimizer
+;; Dimensions: 5
+;; Generations: 100
+(let ((best-solution (cma-es:run #'sphere-function 
+                                 5 
+                                 :generations 100
+                                 :xinit0 (make-array 5 :initial-element 1.0d0)
+                                 :seed 1234)))
+  (format t "Best solution found: ~a~%" best-solution))
+#+END_SRC
+
+*** Advanced Interface (~ask~ / ~tell~)
+
+For scenarios where you need manual control over the loop (e.g., for Reinforcement Learning, distributed evaluation, or drawing specific plotting data per generation).
+
+#+BEGIN_SRC lisp
+(defun my-complex-optimization ()
+  (let* ((dim 3)
+         (pop-size 10)
+         ;; Initialize the optimizer
+         (opt (cma-es:make-optimizer dim pop-size
+                                     :xinit0 (make-array dim :initial-element 0.5d0)
+                                     :xstd0 (make-array dim :initial-element 0.2d0))))
+    
+    (loop for gen from 1 to 50 do
+      ;; 1. ASK: Generate candidate solutions (population)
+      (let ((candidates (cma-es:ask opt)))
+        
+        ;; 2. Evaluate fitness for each candidate
+        ;; (Remember: CMA-ES minimizes the objective function)
+        (let ((fitness-scores 
+                (mapcar (lambda (x) (sphere-function x)) candidates)))
+          
+          (format t "Gen ~d: Best fitness: ~f~%" gen (apply #'min fitness-scores))
+          
+          ;; 3. TELL: Update the strategy with results
+          (cma-es:tell opt fitness-scores))))
+    
+    ;; Note: To avoid memory leaks in the C heap, ensure you clean up
+    ;; the optimizer struct when finished if you are not using `run`.
+    ))
+#+END_SRC
+
+** API Reference
+
+- ~make-optimizer (dim pop-size &key xinit0 xstd0 seed)~ :: Creates a new CMA-ES optimizer struct.
+- ~ask (optimizer)~ :: Returns a list of lists representing the candidate vectors for the current generation.
+- ~tell (optimizer fitnesses)~ :: Updates the internal distribution based on the list of fitness scores provided.
+- ~run (fitness-fn dim &key pop-size generations xinit0 xstd0 seed)~ :: A high-level wrapper that runs the loop automatically and handles memory cleanup.
