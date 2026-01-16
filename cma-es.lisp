@@ -98,6 +98,7 @@
               (xinit0 (make-array dim :initial-element 0.5d0))
               (xstd0 (make-array dim :initial-element 0.5d0))
               (seed 0))
+  "Run a CMA-ES search to tune numerical constants."
   (let ((opt (make-optimizer dim pop-size
                   :xinit0 xinit0
                   :xstd0 xstd0
